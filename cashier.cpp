@@ -4,10 +4,11 @@
   Partner B: Alexander Jessen (A00186160) — Partner B
   Date: 2025‑09‑23
   Purpose: Creating interactive menus
-  Build: g++ -std=c++20 mainmenu.cpp cashier.cpp invmenu.cpp reports.cpp -o
-  serendipity
+  Build: g++ -std=c++20 mainmenu.cpp cashier.cpp invmenu.cpp reports.cpp
+         booktype.cpp menuutils.cpp -o serendipity
 */
 
+#include "menuutils.h"
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -22,7 +23,6 @@ static string formatMoney(double value) {
   return "$ " + oss.str();
 }
 
-static void clearScreen() { cout << "\033[H\033[2J"; }
 static void flushLine() {
   cin.clear();
   cin.ignore(numeric_limits<streamsize>::max(), '\n');
@@ -51,12 +51,19 @@ static string getLineNonEmpty(const char *prompt) {
 }
 
 void cashier() {
-  clearScreen();
+  menu::clearScreen();
   if (cin.rdbuf()->in_avail() > 0 && cin.peek() == '\n') {
     cin.ignore();
   }
-  cout << "Serendipity Book Sellers\n";
-  cout << "Cashier Module\n\n";
+  constexpr int innerWidth = 54;
+  menu::drawBorderLine(innerWidth);
+  menu::printCenteredLine("Serendipity Booksellers", innerWidth);
+  menu::printCenteredLine("Cashier Module", innerWidth);
+  menu::printEmptyLine(innerWidth);
+  menu::printMenuLine("Please enter the sales information below.", innerWidth);
+  menu::printEmptyLine(innerWidth);
+  menu::drawBorderLine(innerWidth);
+  cout << "\n";
 
   string date = getLineNonEmpty("Date (MM/DD/YY): ");
   int qty = getNumber<int>("Quantity of Book: ");
@@ -86,8 +93,14 @@ void cashier() {
   int underlineLen = COL_QTY + COL_ISBN + COL_TITLE + COL_PRICE + COL_TOTAL;
   cout << string(underlineLen, '_') << "\n";
 
+  auto truncatedTitle = title;
+  const int maxTitleLen = COL_TITLE - 1;
+  if (static_cast<int>(truncatedTitle.size()) > maxTitleLen) {
+    truncatedTitle = truncatedTitle.substr(0, maxTitleLen - 1) + "…";
+  }
+
   cout << left << setw(COL_QTY) << qty << setw(COL_ISBN) << isbn
-       << setw(COL_TITLE) << title << right << setw(COL_PRICE)
+       << setw(COL_TITLE) << truncatedTitle << right << setw(COL_PRICE)
        << formatMoney(price) << setw(COL_TOTAL) << formatMoney(merchandise)
        << "\n\n";
 
