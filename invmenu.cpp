@@ -21,6 +21,8 @@
 
 using namespace std;
 
+void bookInfo(const bookType&); // testing to see if this is needed for compilation
+
 static void flushLine() {
   cin.clear();
   cin.ignore(numeric_limits<streamsize>::max(), '\n');
@@ -229,13 +231,60 @@ void renderAddBookScreen(const DraftBook &draft, int highlight,
   menu::printMenuLine(footer, innerWidth);
   menu::drawBorderLine(innerWidth);
 }
-} // namespace
+}
+ // ==== Look up Book Stuff ====
+int lookUpBook() {
+    int choice = 0;
+    do {
+        cout << "1. Look Up by ISBN\n"
+                "2. Look Up by Title\n"
+                "3. Back\n"
+                "Choice: ";
+        cin >> choice;
+        cin.ignore();                   // clear newline
 
-void lookUpBook() {
-  cout << "\n[lookUpBook stub]\nPress ENTER...";
-  cin.get();
+        if (choice == 1) return lookupISBN();
+        else if (choice == 2) return lookupTitle();
+        else if (choice == 3) return -1;
+        else { cout << "Invalid Input.\n"; waitForEnter(); }
+    } while (true);
 }
 
+int lookupISBN() {
+    string isbn;
+    cout << "Enter an ISBN: ";
+    getline(cin, isbn);
+
+    for (size_t i = 0; i < inventory.size(); ++i) {
+        if (inventory[i].getISBN() == isbn) {
+            bookInfo(inventory[i]);
+            waitForEnter();
+            return static_cast<int>(i);
+        }
+    }
+    cout << "ISBN not found in inventory.\n";
+    waitForEnter();
+    return -1;
+}
+
+int lookupTitle() {
+    string title;
+    cout << "Enter a Title: ";
+    getline(cin, title);
+
+    for (size_t i = 0; i < inventory.size(); ++i) {
+        if (inventory[i].getTitle() == title) {
+            bookInfo(inventory[i]);
+            waitForEnter();
+            return static_cast<int>(i);
+        }
+    }
+    cout << "Title not found in inventory.\n";
+    waitForEnter();
+    return -1;
+}
+
+	// ==== Add Book Stuff =====
 void addBook() {
   if (inventory.size() >= kMaxBooks) {
     DraftBook empty;
@@ -334,6 +383,7 @@ void deleteBook() {
   cin.get();
 }
 
+	// ==== Inv Menu ====
 void invMenu() {
   int highlight = 1;
   int choice = 0;
