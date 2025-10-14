@@ -180,6 +180,7 @@ string ellipsize(const string &text, int maxLen) {
   return text.substr(0, maxLen - 1) + "…";
 }
 
+// === Render Inv Menu Screen ===
 void renderInventoryMenuScreen(int highlight) {
   constexpr int innerWidth = 54;
   menu::clearScreen();
@@ -203,6 +204,7 @@ void renderInventoryMenuScreen(int highlight) {
   menu::drawBorderLine(innerWidth);
 }
 
+// === Render Add Book Screen ===
 void renderAddBookScreen(const DraftBook &draft, int highlight,
                          const string &footer) {
   constexpr int innerWidth = 66;
@@ -225,7 +227,7 @@ void renderAddBookScreen(const DraftBook &draft, int highlight,
       "3. Enter Author",           "4. Enter Publisher",
       "5. Enter Date Added (mm/dd/yyyy)", "6. Enter Quantity on Hand",
       "7. Enter Wholesale Cost",   "8. Enter Retail Price",
-      "9. Save Book to Database",  "10. Return to Inventory Menu"};
+      "9. Save Book to Database",  "0. Return to Inventory Menu"};
 
   const vector<pair<string, string>> fieldSummaries = {
       {"Title", draft.titleSet ? draft.title : "UNSET"},
@@ -256,6 +258,7 @@ void renderAddBookScreen(const DraftBook &draft, int highlight,
   menu::drawBorderLine(innerWidth);
 }
 
+// === Render LookUp Menu Screen ===
 void renderLookUpMenuScreen(int highlight) {
   constexpr int innerWidth = 58;
   menu::clearScreen();
@@ -277,6 +280,7 @@ void renderLookUpMenuScreen(int highlight) {
   menu::drawBorderLine(innerWidth);
 }
 
+// === Title Search ===
 vector<size_t> searchByTitle(const string &query) {
   vector<size_t> matches;
   string target = toLower(query);
@@ -288,6 +292,7 @@ vector<size_t> searchByTitle(const string &query) {
   return matches;
 }
 
+// === ISBN Search ===
 vector<size_t> searchByISBN(const string &query) {
   vector<size_t> matches;
   string target = toLower(query);
@@ -398,6 +403,7 @@ void performSearch(bool byTitle) {
 
 } // namespace
 
+// === LookUpBook Stuff ===
 void lookUpBook() {
   if (inventory.empty()) {
     constexpr int innerWidth = 58;
@@ -533,7 +539,7 @@ void addBook() {
       renderAddBookScreen(draft, highlight, "Book saved to database.");
       waitForEnter();
       return;
-    case 10:
+    case 0:
       if (!draft.anyFieldSet()) {
         return;
       } else {
