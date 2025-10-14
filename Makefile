@@ -1,6 +1,6 @@
 CXX := g++
 CXXFLAGS := -std=c++20 -Wall -Wextra -pedantic
-SOURCES := mainmenu.cpp cashier.cpp invmenu.cpp reports.cpp booktype.cpp menuutils.cpp
+SOURCES := mainmenu.cpp cashier.cpp invmenu.cpp reports.cpp booktype.cpp bookinfo.cpp menuutils.cpp
 TARGET := serendipity
 
 $(TARGET): $(SOURCES)
