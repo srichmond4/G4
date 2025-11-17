@@ -134,6 +134,23 @@ string promptDate(const string &prompt) {
   }
 }
 
+bool promptYesNo(const string &prompt) {
+  while (true) {
+    cout << prompt;
+    string response;
+    getline(cin, response);
+    response = trim(response);
+    if (response.empty())
+      continue;
+    char c = static_cast<char>(tolower(response[0]));
+    if (c == 'y')
+      return true;
+    if (c == 'n')
+      return false;
+    cout << "Please enter y or n.\n";
+  }
+}
+
 struct DraftBook {
   string title;
   bool titleSet = false;
@@ -163,6 +180,56 @@ struct DraftBook {
   }
 };
 
+DraftBook makeDraftFromBook(const bookType &book) {
+  DraftBook draft;
+  draft.title = book.getTitle();
+  draft.titleSet = true;
+  draft.isbn = book.getISBN();
+  draft.isbnSet = true;
+  draft.author = book.getAuthor();
+  draft.authorSet = true;
+  draft.publisher = book.getPub();
+  draft.publisherSet = true;
+  draft.dateAdded = book.getDateAdded();
+  draft.dateSet = true;
+  draft.quantity = book.getQtyOnHand();
+  draft.quantitySet = true;
+  draft.wholesale = book.getWholesale();
+  draft.wholesaleSet = true;
+  draft.retail = book.getRetail();
+  draft.retailSet = true;
+  return draft;
+}
+
+void applyDraftToBook(bookType &book, const DraftBook &draft) {
+  book.setTitle(draft.title);
+  book.setISBN(draft.isbn);
+  book.setAuthor(draft.author);
+  book.setPub(draft.publisher);
+  book.setDateAdded(draft.dateAdded);
+  book.setQtyOnHand(draft.quantity);
+  book.setWholesale(draft.wholesale);
+  book.setRetail(draft.retail);
+}
+
+void printBookSummary(const bookType &book) {
+  ios::fmtflags oldFlags = cout.flags();
+  streamsize oldPrecision = cout.precision();
+
+  cout << "\nTitle: " << book.getTitle() << '\n';
+  cout << "ISBN: " << book.getISBN() << '\n';
+  cout << "Author: " << book.getAuthor() << '\n';
+  cout << "Publisher: " << book.getPub() << '\n';
+  cout << "Date Added: " << book.getDateAdded() << '\n';
+  cout << "Quantity on Hand: " << book.getQtyOnHand() << '\n';
+  cout << fixed << setprecision(2);
+  cout << "Wholesale: $" << book.getWholesale() << '\n';
+  cout << "Retail: $" << book.getRetail() << '\n';
+
+  cout.flags(oldFlags);
+  cout.precision(oldPrecision);
+}
+
 void waitForEnter() {
   cout << "\nPress ENTER to continue...";
   cin.get();
@@ -174,10 +241,29 @@ string toLower(string text) {
   return text;
 }
 
+bool hasDuplicateISBN(const string &isbn,
+                      size_t skipIndex = numeric_limits<size_t>::max()) {
+  string target = toLower(isbn);
+  for (size_t i = 0; i < inventory.size(); ++i) {
+    if (i == skipIndex)
+      continue;
+    if (toLower(inventory[i].getISBN()) == target)
+      return true;
+  }
+  return false;
+}
+
 string ellipsize(const string &text, int maxLen) {
   if (maxLen <= 1 || static_cast<int>(text.size()) <= maxLen)
     return text;
   return text.substr(0, maxLen - 1) + "…";
+}
+
+string buildFieldSummaryText(const string &label, const string &value,
+                             int rightWidth) {
+  int available = max(1, rightWidth - static_cast<int>(label.size()) - 3);
+  string truncated = ellipsize(value, available);
+  return label + " : " + truncated;
 }
 
 // === Render Inv Menu Screen ===
@@ -219,7 +305,7 @@ void renderAddBookScreen(const DraftBook &draft, int highlight,
   ostringstream meta;
   meta << "DATABASE SIZE: " << kMaxBooks
        << "   CURRENT COUNT: " << bookType::getBookCount();
-  menu::printMenuLine(meta.str(), innerWidth);
+  menu::printMenuLine(ellipsize(meta.str(), innerWidth), innerWidth);
   menu::printEmptyLine(innerWidth);
 
   const vector<string> menuItems = {
@@ -243,11 +329,75 @@ void renderAddBookScreen(const DraftBook &draft, int highlight,
     bool isHighlighted = (static_cast<int>(i) + 1 == highlight);
     string rightText;
     if (i < fieldSummaries.size()) {
-      string value = fieldSummaries[i].second;
-      if (i == 0 && draft.titleSet) {
-        value = ellipsize(value, 20);
-      }
-      rightText = fieldSummaries[i].first + " : " + value;
+      const string &label = fieldSummaries[i].first;
+      const string &value = fieldSummaries[i].second;
+      rightText = buildFieldSummaryText(label, value, rightWidth);
+    }
+    menu::printDualColumnLine(menuItems[i], isHighlighted, leftWidth, rightText,
+                              rightWidth, innerWidth);
+  }
+
+  menu::printEmptyLine(innerWidth);
+  menu::printMenuLine(footer, innerWidth);
+  menu::drawBorderLine(innerWidth);
+}
+
+// === Render Edit Book Screen ===
+void renderEditBookScreen(const DraftBook &draft, int highlight,
+                          const string &footer) {
+  const vector<string> menuItems = {
+      "1. Edit Book Title",        "2. Edit ISBN",
+      "3. Edit Author",            "4. Edit Publisher",
+      "5. Edit Date Added",        "6. Edit Quantity on Hand",
+      "7. Edit Wholesale Cost",    "8. Edit Retail Price",
+      "9. Save Changes",           "0. Cancel Editing"};
+
+  const vector<pair<string, string>> fieldSummaries = {
+      {"Title", draft.titleSet ? draft.title : "UNSET"},
+      {"ISBN", draft.isbnSet ? draft.isbn : "UNSET"},
+      {"Author", draft.authorSet ? draft.author : "UNSET"},
+      {"Publisher", draft.publisherSet ? draft.publisher : "UNSET"},
+      {"Date Added", draft.dateSet ? draft.dateAdded : "UNSET"},
+      {"QOH", draft.quantitySet ? to_string(draft.quantity) : "0"},
+      {"Wholesale Value", formatAmount(draft.wholesaleSet, draft.wholesale)},
+      {"Retail Value", formatAmount(draft.retailSet, draft.retail)}};
+
+  int leftWidth = 0;
+  for (const string &item : menuItems) {
+    leftWidth = max(leftWidth, static_cast<int>(item.size()));
+  }
+  leftWidth = max(leftWidth, 32);
+
+  int rightWidth = 0;
+  for (const auto &summary : fieldSummaries) {
+    string composed = summary.first + " : " + summary.second;
+    rightWidth = max(rightWidth, static_cast<int>(composed.size()));
+  }
+  rightWidth = max(rightWidth, 32);
+
+  string editingLine =
+      "Editing: " + (draft.titleSet ? draft.title : "Title not set");
+
+  int innerWidth = leftWidth + 3 + rightWidth;
+  innerWidth = max(innerWidth, static_cast<int>(editingLine.size()));
+  innerWidth = max(innerWidth, static_cast<int>(footer.size()));
+  innerWidth = max(innerWidth, 66);
+
+  menu::clearScreen();
+  menu::drawBorderLine(innerWidth);
+  menu::printCenteredLine("Serendipity Booksellers", innerWidth);
+  menu::printCenteredLine("Edit Book Record", innerWidth);
+  menu::printEmptyLine(innerWidth);
+  menu::printMenuLine(editingLine, innerWidth);
+  menu::printEmptyLine(innerWidth);
+
+  for (size_t i = 0; i < menuItems.size(); ++i) {
+    bool isHighlighted = (static_cast<int>(i) + 1 == highlight);
+    string rightText;
+    if (i < fieldSummaries.size()) {
+      const string &label = fieldSummaries[i].first;
+      const string &value = fieldSummaries[i].second;
+      rightText = buildFieldSummaryText(label, value, rightWidth);
     }
     menu::printDualColumnLine(menuItems[i], isHighlighted, leftWidth, rightText,
                               rightWidth, innerWidth);
@@ -260,15 +410,15 @@ void renderAddBookScreen(const DraftBook &draft, int highlight,
 
 // === Render LookUp Menu Screen ===
 void renderLookUpMenuScreen(int highlight) {
-  constexpr int innerWidth = 58;
+  constexpr int innerWidth = 66;
   menu::clearScreen();
   menu::drawBorderLine(innerWidth);
   menu::printCenteredLine("Serendipity Booksellers", innerWidth);
   menu::printCenteredLine("Look Up Book", innerWidth);
   menu::printEmptyLine(innerWidth);
 
-  const vector<string> options = {"1. Search by Title", "2. Search by ISBN",
-                                  "3. Return to Inventory Menu"};
+  const vector<string> options = {"1. Search Inventory (Title or ISBN)",
+                                  "2. Return to Inventory Menu"};
 
   for (size_t i = 0; i < options.size(); ++i) {
     bool isHighlighted = (static_cast<int>(i) + 1 == highlight);
@@ -276,28 +426,19 @@ void renderLookUpMenuScreen(int highlight) {
   }
 
   menu::printEmptyLine(innerWidth);
-  menu::printMenuLine("Enter the menu number and press ENTER.", innerWidth);
+  menu::printMenuLine("Enter 1 to search or 2 to return.", innerWidth);
   menu::drawBorderLine(innerWidth);
 }
 
-// === Title Search ===
-vector<size_t> searchByTitle(const string &query) {
+vector<size_t> searchInventory(const string &query) {
   vector<size_t> matches;
   string target = toLower(query);
   for (size_t i = 0; i < inventory.size(); ++i) {
-    if (toLower(inventory[i].getTitle()).find(target) != string::npos) {
-      matches.push_back(i);
-    }
-  }
-  return matches;
-}
-
-// === ISBN Search ===
-vector<size_t> searchByISBN(const string &query) {
-  vector<size_t> matches;
-  string target = toLower(query);
-  for (size_t i = 0; i < inventory.size(); ++i) {
-    if (toLower(inventory[i].getISBN()).find(target) != string::npos) {
+    const bookType &book = inventory[i];
+    string lowerTitle = toLower(book.getTitle());
+    string lowerISBN = toLower(book.getISBN());
+    if (lowerTitle.find(target) != string::npos ||
+        lowerISBN.find(target) != string::npos) {
       matches.push_back(i);
     }
   }
@@ -321,7 +462,8 @@ void showNoMatches(const string &query) {
   cin.get();
 }
 
-void displaySearchResults(const vector<size_t> &matches, const string &query) {
+int displaySearchResults(const vector<size_t> &matches, const string &query,
+                         bool selectionMode) {
   vector<string> resultLines;
   resultLines.reserve(matches.size());
 
@@ -335,11 +477,14 @@ void displaySearchResults(const vector<size_t> &matches, const string &query) {
   }
 
   ostringstream summaryStream;
-  summaryStream << matches.size() << " match(es) for \"" << query << "\".";
+  summaryStream << matches.size() << " match(es) for \"" << query
+                << "\" (Title/ISBN).";
   string summaryText = summaryStream.str();
   innerWidth = max(innerWidth, static_cast<int>(summaryText.size()));
 
-  const string instructionText = "Enter result number or 0 to cancel.";
+  const string instructionText =
+      selectionMode ? "Enter result number (0 to cancel selection)."
+                    : "Enter result number (0 to return).";
   innerWidth = max(innerWidth, static_cast<int>(instructionText.size()));
 
   while (true) {
@@ -363,48 +508,51 @@ void displaySearchResults(const vector<size_t> &matches, const string &query) {
 
     int selection =
         getChoiceInRange(0, static_cast<int>(matches.size()),
-                         matches.empty() ? "Select (0 to cancel): "
-                                         : "Select (0 to cancel, 1-"
-                                               + to_string(matches.size()) + "): ");
+                         matches.empty()
+                             ? "Select (0 to cancel): "
+                             : "Select (0 to cancel, 1-"
+                                   + to_string(matches.size()) + "): ");
     if (selection == 0) {
-      return;
+      return -1;
     }
 
     size_t index = matches[static_cast<size_t>(selection - 1)];
+    if (selectionMode) {
+      return static_cast<int>(index);
+    }
     bookInfo(inventory[index]);
   }
 }
 
-void performSearch(bool byTitle) {
+int performSearch(bool selectionMode) {
   constexpr int innerWidth = 66;
   menu::clearScreen();
   menu::drawBorderLine(innerWidth);
   menu::printCenteredLine("Serendipity Booksellers", innerWidth);
-  menu::printCenteredLine(byTitle ? "Search by Title" : "Search by ISBN",
-                          innerWidth);
+  menu::printCenteredLine("Search Inventory", innerWidth);
   menu::printEmptyLine(innerWidth);
-  menu::printMenuLine("Enter your search text then press ENTER.", innerWidth);
+  menu::printMenuLine(
+      "Enter title keywords or ISBN fragment, then press ENTER.", innerWidth);
   menu::printEmptyLine(innerWidth);
   menu::drawBorderLine(innerWidth);
   cout << "\n";
 
-  string query = trim(promptNonEmptyString(
-      byTitle ? "Enter title keyword(s): " : "Enter ISBN or fragment: "));
-  vector<size_t> matches =
-      byTitle ? searchByTitle(query) : searchByISBN(query);
+  string query = trim(
+      promptNonEmptyString("Enter title keywords or ISBN fragment: "));
+  vector<size_t> matches = searchInventory(query);
 
   if (matches.empty()) {
     showNoMatches(query);
-    return;
+    return -1;
   }
 
-  displaySearchResults(matches, query);
+  return displaySearchResults(matches, query, selectionMode);
 }
 
 } // namespace
 
 // === LookUpBook Stuff ===
-void lookUpBook() {
+int lookUpBook(bool selectionMode) {
   if (inventory.empty()) {
     constexpr int innerWidth = 58;
     menu::clearScreen();
@@ -417,58 +565,58 @@ void lookUpBook() {
     menu::printMenuLine("Press ENTER to return...", innerWidth);
     menu::drawBorderLine(innerWidth);
     cin.get();
-    return;
+    return -1;
   }
 
   int highlight = 1;
-  bool done = false;
-  while (!done) {
+  while (true) {
     renderLookUpMenuScreen(highlight);
-    int choice = getChoiceInRange(1, 3, "\nEnter selection (1-3): ");
+    int choice = getChoiceInRange(1, 2, "\nEnter selection (1-2): ");
     highlight = choice;
     switch (choice) {
-    case 1:
-      performSearch(true);
+    case 1: {
+      int result = performSearch(selectionMode);
+      if (selectionMode && result != -1) {
+        return result;
+      }
       break;
+    }
     case 2:
-      performSearch(false);
-      break;
-    case 3:
-      done = true;
-      break;
+      return -1;
     }
   }
 }
 
 // ==== Add Book Stuff =====
 void addBook() {
-  if (inventory.size() >= kMaxBooks) {
-    DraftBook empty;
-    renderAddBookScreen(empty, 0, "Database is full. Press ENTER to return...");
-    cout << "\nThe inventory database is full. Remove a book before adding a new "
-            "record.\n";
-    waitForEnter();
-    return;
-  }
-
   DraftBook draft;
   int highlight = 1;
-  const string defaultFooter = "Enter a number (1-10), then press ENTER.";
+  const string defaultFooter = "Enter a number (0-9), then press ENTER.";
   string footer = defaultFooter;
 
   while (true) {
+    if (inventory.size() >= kMaxBooks) {
+      DraftBook empty;
+      renderAddBookScreen(empty, 0,
+                          "Database is full. Press ENTER to return...");
+      cout << "\nThe inventory database is full. Remove a book before adding a "
+              "new record.\n";
+      waitForEnter();
+      return;
+    }
+
     renderAddBookScreen(draft, highlight, footer);
     footer = defaultFooter;
-    cout << "\nEnter selection (1-10): ";
+    cout << "\nEnter selection (0-9): ";
     string line;
     getline(cin, line);
     stringstream ss(line);
     int choice;
-    if (!(ss >> choice) || choice < 1 || choice > 10) {
-      footer = "Enter a number between 1 and 10.";
+    if (!(ss >> choice) || choice < 0 || choice > 9) {
+      footer = "Enter a number between 0 and 9.";
       continue;
     }
-    highlight = choice;
+    highlight = (choice == 0 ? 10 : choice);
 
     switch (choice) {
     case 1:
@@ -477,12 +625,24 @@ void addBook() {
       draft.title = promptNonEmptyString("Enter Book Title: ");
       draft.titleSet = true;
       break;
-    case 2:
+    case 2: {
       renderAddBookScreen(draft, highlight,
                           "Editing ISBN. Enter ISBN below.");
-      draft.isbn = promptNonEmptyString("Enter ISBN: ");
-      draft.isbnSet = true;
+      if (draft.isbnSet) {
+        cout << "\nCurrent ISBN: " << draft.isbn << '\n';
+      }
+      while (true) {
+        string newISBN = promptNonEmptyString("Enter ISBN: ");
+        if (hasDuplicateISBN(newISBN)) {
+          cout << "A book with that ISBN already exists. Enter a unique ISBN.\n";
+          continue;
+        }
+        draft.isbn = newISBN;
+        draft.isbnSet = true;
+        break;
+      }
       break;
+    }
     case 3:
       renderAddBookScreen(draft, highlight,
                           "Editing Author. Enter Author below.");
@@ -533,12 +693,17 @@ void addBook() {
         footer = "Complete all fields before saving.";
         break;
       }
+      if (hasDuplicateISBN(draft.isbn)) {
+        footer = "Duplicate ISBN exists. Update ISBN before saving.";
+        break;
+      }
       inventory.emplace_back(draft.isbn, draft.title, draft.author,
                              draft.publisher, draft.dateAdded, draft.quantity,
                              draft.wholesale, draft.retail);
-      renderAddBookScreen(draft, highlight, "Book saved to database.");
-      waitForEnter();
-      return;
+      footer = "Book saved to database. Enter another or select 0 to return.";
+      draft = DraftBook{};
+      highlight = 1;
+      break;
     case 0:
       if (!draft.anyFieldSet()) {
         return;
@@ -559,12 +724,170 @@ void addBook() {
 }
 
 void editBook() {
-  cout << "\n[editBook stub]\nPress ENTER...";
-  cin.get();
+  if (inventory.empty()) {
+    cout << "\nThere are no books to edit.\n";
+    waitForEnter();
+    return;
+  }
+
+  while (true) {
+    int idx = lookUpBook(true);
+    if (idx == -1) {
+      cout << "\nNo book selected.\n";
+      if (!promptYesNo("Edit another? (y/n): "))
+        return;
+      continue;
+    }
+
+    size_t index = static_cast<size_t>(idx);
+    DraftBook draft = makeDraftFromBook(inventory[index]);
+    const string defaultFooter =
+        "Enter a number (0-9) to edit a field, save, or cancel.";
+    string footer = defaultFooter;
+    int highlight = 1;
+    bool editing = true;
+
+    while (editing) {
+      renderEditBookScreen(draft, highlight, footer);
+      footer = defaultFooter;
+      cout << "\nEnter selection (0-9): ";
+      string line;
+      getline(cin, line);
+      stringstream ss(line);
+      int choice;
+      if (!(ss >> choice) || choice < 0 || choice > 9) {
+        footer = "Enter a number between 0 and 9.";
+        continue;
+      }
+      highlight = choice;
+
+      switch (choice) {
+      case 1:
+        renderEditBookScreen(draft, highlight,
+                             "Editing Title. Enter new Title below.");
+        cout << "\nCurrent Title: " << draft.title << '\n';
+        draft.title = promptNonEmptyString("Enter Book Title: ");
+        draft.titleSet = true;
+        break;
+      case 2: {
+        renderEditBookScreen(draft, highlight,
+                             "Editing ISBN. Enter new ISBN below.");
+        cout << "\nCurrent ISBN: " << draft.isbn << '\n';
+        string newISBN = promptNonEmptyString("Enter ISBN: ");
+        if (hasDuplicateISBN(newISBN, index)) {
+          footer = "Duplicate ISBN detected. Value unchanged.";
+        } else {
+          draft.isbn = newISBN;
+          draft.isbnSet = true;
+        }
+        break;
+      }
+      case 3:
+        renderEditBookScreen(draft, highlight,
+                             "Editing Author. Enter new Author below.");
+        cout << "\nCurrent Author: " << draft.author << '\n';
+        draft.author = promptNonEmptyString("Enter Author: ");
+        draft.authorSet = true;
+        break;
+      case 4:
+        renderEditBookScreen(draft, highlight,
+                             "Editing Publisher. Enter new Publisher below.");
+        cout << "\nCurrent Publisher: " << draft.publisher << '\n';
+        draft.publisher = promptNonEmptyString("Enter Publisher: ");
+        draft.publisherSet = true;
+        break;
+      case 5:
+        renderEditBookScreen(
+            draft, highlight,
+            "Editing Date Added. Enter Date (mm/dd/yyyy) below.");
+        cout << "\nCurrent Date Added: " << draft.dateAdded << '\n';
+        draft.dateAdded = promptDate("Enter Date Added (mm/dd/yyyy): ");
+        draft.dateSet = true;
+        break;
+      case 6:
+        renderEditBookScreen(
+            draft, highlight,
+            "Editing Quantity on Hand. Enter non-negative value below.");
+        cout << "\nCurrent Quantity on Hand: " << draft.quantity << '\n';
+        draft.quantity = promptNonNegativeInt("Enter Quantity on Hand: ");
+        draft.quantitySet = true;
+        break;
+      case 7:
+        renderEditBookScreen(
+            draft, highlight,
+            "Editing Wholesale Cost. Enter non-negative value below.");
+        cout << "\nCurrent Wholesale Cost: " << draft.wholesale << '\n';
+        draft.wholesale = promptNonNegativeFloat("Enter Wholesale Cost: ");
+        draft.wholesaleSet = true;
+        break;
+      case 8:
+        renderEditBookScreen(
+            draft, highlight,
+            "Editing Retail Price. Enter non-negative value below.");
+        cout << "\nCurrent Retail Price: " << draft.retail << '\n';
+        draft.retail = promptNonNegativeFloat("Enter Retail Price: ");
+        draft.retailSet = true;
+        break;
+      case 9:
+        if (hasDuplicateISBN(draft.isbn, index)) {
+          footer = "Duplicate ISBN detected. Resolve before saving.";
+          break;
+        }
+        applyDraftToBook(inventory[index], draft);
+        renderEditBookScreen(draft, highlight,
+                             "Changes saved. Press ENTER to continue.");
+        waitForEnter();
+        editing = false;
+        break;
+      case 0:
+        if (promptYesNo("Discard changes without saving? (y/n): ")) {
+          editing = false;
+        }
+        break;
+      }
+    }
+
+    if (!promptYesNo("Edit another? (y/n): "))
+      return;
+  }
 }
 void deleteBook() {
-  cout << "\n[deleteBook stub]\nPress ENTER...";
-  cin.get();
+  if (inventory.empty()) {
+    cout << "\nThere are no books to delete.\n";
+    waitForEnter();
+    return;
+  }
+
+  while (true) {
+    if (inventory.empty()) {
+      cout << "\nInventory is empty. Returning to menu.\n";
+      waitForEnter();
+      return;
+    }
+
+    int idx = lookUpBook(true);
+    if (idx == -1) {
+      cout << "\nNo book selected.\n";
+      if (!promptYesNo("Delete another? (y/n): "))
+        return;
+      continue;
+    }
+
+    size_t index = static_cast<size_t>(idx);
+    cout << "\nSelected Book:";
+    printBookSummary(inventory[index]);
+    bool confirm = promptYesNo("Delete this book? (y/n): ");
+    if (confirm) {
+      inventory.erase(inventory.begin() +
+                      static_cast<vector<bookType>::difference_type>(index));
+      cout << "\nBook deleted from inventory.\n";
+    } else {
+      cout << "\nDeletion canceled.\n";
+    }
+
+    if (!promptYesNo("Delete another? (y/n): "))
+      return;
+  }
 }
 
 	// ==== Inv Menu ====

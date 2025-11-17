@@ -49,8 +49,17 @@ void printCenteredLine(const std::string &text, int innerWidth) {
 void printDualColumnLine(const std::string &leftText, bool highlightLeft,
                          int leftWidth, const std::string &rightText,
                          int rightWidth, int innerWidth) {
-  std::string leftPadded = padRight(leftText, leftWidth);
-  std::string rightPadded = padRight(rightText, rightWidth);
+  std::string leftTrimmed = leftText;
+  if (static_cast<int>(leftTrimmed.size()) > leftWidth) {
+    leftTrimmed = leftTrimmed.substr(0, leftWidth);
+  }
+  std::string leftPadded = padRight(leftTrimmed, leftWidth);
+
+  std::string rightTrimmed = rightText;
+  if (static_cast<int>(rightTrimmed.size()) > rightWidth) {
+    rightTrimmed = rightTrimmed.substr(0, rightWidth);
+  }
+  std::string rightPadded = padRight(rightTrimmed, rightWidth);
   std::cout << "| ";
   if (highlightLeft) {
     std::cout << "\033[7m" << leftPadded << "\033[0m";

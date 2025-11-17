@@ -3,7 +3,7 @@
 
 void invMenu();
 
-void lookUpBook();
+int lookUpBook(bool selectionMode = false);
 void addBook();
 void editBook();
 void deleteBook();
